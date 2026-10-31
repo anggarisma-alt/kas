@@ -35,7 +35,7 @@ const by = (arr, k) => { const m = {}; arr.forEach(x => { m[x[k || 'ID']] = x; }
 
 const S = {
   token: null, user: null, B: null, I: null, calc: null, page: 'dashboard', per: null, hist: [], loadedAt: 0,
-  f: { per: null, jenis: '', rek: '', status: '', q: '', limit: 60 },
+  f: { per: null, jenis: '', rek: '', status: '', sis: '', q: '', limit: 60 },
   cache: {}, pj: { tab: 'belum', sel: {} }, lap: { type: 'BKU', per: null, data: null }, masterTab: 'kategori', ignorePop: 0
 };
 const JENIS = { TERIMA: 'Penerimaan', KELUAR: 'Pengeluaran', TARIK: 'Tarik Tunai', SETOR: 'Setor Tunai', BAYAR_PAJAK: 'Setor Pajak' };
@@ -197,7 +197,8 @@ function reindex() {
   });
   const titipan = B.pajak.filter(x => x.Status === 'BELUM').reduce((a, x) => a + x.Jumlah, 0);
   const belumSerah = (B.penyaluran || []).filter(x => x.Status === 'BELUM').reduce((a, x) => a + x.Jumlah, 0);
-  S.calc = { awal: awal, now: now, bulan: bulan, titipan: titipan, belumSerah: belumSerah };
+  const sisTx = B.transaksi.filter(t => t.Jenis === 'KELUAR' && !t.KoreksiDari && !t.DikoreksiID && t.Siskeudes === 'BELUM'), sisSl = (B.penyaluran || []).filter(x => x.Status === 'BELUM' && x.Siskeudes === 'BELUM');
+  S.calc = { awal: awal, now: now, bulan: bulan, titipan: titipan, belumSerah: belumSerah, sisTx: sisTx, sisSl: sisSl, sisJml: sisTx.concat(sisSl).reduce((a, x) => a + x.Jumlah, 0) };
 }
 function saldoSampai(filter) {
   const r = { TUNAI: S.calc.awal.TUNAI, BANK: S.calc.awal.BANK };
@@ -388,8 +389,9 @@ function txRow(t) {
   const st = t.Status !== 'VERIFIED' ? pill(STATUS_TX[t.Status][0], STATUS_TX[t.Status][1]) : '';
   const kor = t.KoreksiDari ? pill('bad', 'Koreksi') : (t.DikoreksiID ? pill('', 'Dikoreksi') : '');
   const lamp = t.BuktiID ? icon('clip', 'sm') : '';
+  const sis = (t.Jenis === 'KELUAR' && !t.KoreksiDari && !t.DikoreksiID) ? (t.Siskeudes === 'SUDAH' ? pill('ok', 'Siskeudes ✓') : (t.Siskeudes === 'BELUM' ? pill('wr', 'Belum cair Siskeudes') : '')) : '';
   return '<button class="item" onclick="A.detailTx(\'' + t.ID + '\')"><span class="ico ' + (ic === 'in' ? 'in' : '') + '">' + icon(ic) + '</span>'
-    + '<span class="grow"><span class="t1">' + esc(t.Uraian) + '</span><span class="t2"><span>' + esc(t.NoBukti) + '</span><span>' + esc(ketKas(t)) + '</span>' + lamp + st + kor + '</span></span>' + amt + '</button>';
+    + '<span class="grow"><span class="t1">' + esc(t.Uraian) + '</span><span class="t2"><span>' + esc(t.NoBukti) + '</span><span>' + esc(ketKas(t)) + '</span>' + lamp + st + kor + sis + '</span></span>' + amt + '</button>';
 }
 function urutTx(a, b) { return a.Tanggal !== b.Tanggal ? (a.Tanggal < b.Tanggal ? 1 : -1) : (a.DibuatPada < b.DibuatPada ? 1 : -1); }
 function listHari(arr) {
@@ -443,6 +445,7 @@ function buatInsight() {
     const bebas = c.now.TUNAI - c.titipan - c.belumSerah;
     out.push({ w: bebas < 0, t: 'Dari kas tunai ' + rp(c.now.TUNAI) + ', ' + rp(c.titipan) + ' adalah titipan pajak' + (c.belumSerah > 0 ? ' dan ' + rp(c.belumSerah) + ' dana kegiatan belum diserahkan' : '') + '. Dana tunai yang bebas dipakai: ' + rp(bebas) + '.' });
   }
+  if (c.sisTx.length + c.sisSl.length) out.push({ t: (c.sisTx.length + c.sisSl.length) + ' kegiatan/pengeluaran senilai ' + rp(c.sisJml) + ' belum dicairkan di Siskeudes.' });
   const bs = S.B.penyaluran.filter(x => x.Status === 'BELUM');
   if (bs.length) {
     const tua2 = Math.max.apply(null, bs.map(x => diffHari(x.Tanggal, hariIni())));
@@ -485,6 +488,7 @@ PAGES.dashboard = function () {
     + '</div>';
   if (c.titipan > 0) h += '<div class="mt">' + kpi('Titipan pajak belum disetor', 'percent', rp(c.titipan), belumN + ' potongan · ketuk untuk melihat', 'warn', 'A.go(\'pajak\')') + '</div>';
   if (c.belumSerah > 0) h += '<div class="mt">' + kpi('Dana kegiatan belum diserahkan', 'users', rp(c.belumSerah), S.B.penyaluran.filter(x => x.Status === 'BELUM').length + ' kegiatan · ketuk untuk melihat', 'warn', 'A.formSerah()') + '</div>';
+  if (c.sisTx.length + c.sisSl.length > 0) h += '<div class="mt">' + kpi('Belum dicairkan di Siskeudes', 'file', rp(c.sisJml), (c.sisTx.length + c.sisSl.length) + ' kegiatan/pengeluaran · ketuk untuk melihat', 'warn', 'A.formSis()') + '</div>';
   if (can('BENDAHARA')) h += '<div class="sectionhead"><h2>Catat cepat</h2></div><div class="chooser">' + chooserBtns() + '</div>';
   h += '<div class="sectionhead"><h2>Tren 6 bulan</h2><div class="legend"><span><i style="background:var(--accent)"></i>Terima</span><span><i style="background:var(--muted);opacity:.55"></i>Keluar</span></div></div>'
     + '<div class="card">' + chartSvg(_seri) + '<div class="xs muted center" id="chartCap">Ketuk batang untuk melihat nilainya</div></div>';
@@ -514,6 +518,7 @@ PAGES.transaksi = function () {
   h += '<div class="tabs mb">' + chips.map(c => '<button class="chip ' + (f.jenis === c[0] ? 'on' : '') + '" onclick="A.fJenis(\'' + c[0] + '\')">' + c[1] + '</button>').join('') + '</div>';
   h += '<div class="grid g2 mb"><select class="inp" aria-label="Kas" onchange="A.fRek(this.value)"><option value="">Semua kas</option><option value="TUNAI"' + (f.rek === 'TUNAI' ? ' selected' : '') + '>Kas Tunai</option><option value="BANK"' + (f.rek === 'BANK' ? ' selected' : '') + '>Kas Bank</option></select>'
     + '<select class="inp" aria-label="Status" onchange="A.fStatus(this.value)"><option value="">Semua status</option><option value="DRAFT"' + (f.status === 'DRAFT' ? ' selected' : '') + '>Draft</option><option value="DITOLAK"' + (f.status === 'DITOLAK' ? ' selected' : '') + '>Ditolak</option><option value="VERIFIED"' + (f.status === 'VERIFIED' ? ' selected' : '') + '>Terverifikasi</option></select></div>';
+  h += '<div class="mb"><select class="inp" aria-label="Siskeudes" onchange="A.fSis(this.value)"><option value="">Semua status Siskeudes</option><option value="BELUM"' + (f.sis === 'BELUM' ? ' selected' : '') + '>Belum dicairkan di Siskeudes</option><option value="SUDAH"' + (f.sis === 'SUDAH' ? ' selected' : '') + '>Sudah dicairkan di Siskeudes</option></select></div>';
   h += '<div id="txbar"></div><div id="txlist"></div>';
   V().innerHTML = h;
   renderTxList();
@@ -524,6 +529,7 @@ function txTersaring() {
     if (f.per && f.per !== 'ALL' && t.Periode !== f.per) return false;
     if (f.jenis === 'MUTASI' ? (t.Jenis !== 'TARIK' && t.Jenis !== 'SETOR') : (f.jenis && t.Jenis !== f.jenis)) return false;
     if (f.status && t.Status !== f.status) return false;
+    if (f.sis && !(t.Jenis === 'KELUAR' && !t.KoreksiDari && !t.DikoreksiID && t.Siskeudes === f.sis)) return false;
     if (f.rek) { const e = efek(t); if (e[f.rek] === 0) return false; }
     if (q && (t.Uraian + ' ' + t.NoBukti + ' ' + t.Kegiatan + ' ' + t.DiserahkanKepada + ' ' + t.Keterangan).toLowerCase().indexOf(q) < 0) return false;
     return true;
@@ -542,6 +548,7 @@ function renderTxList() {
 A.fPer = v => { S.f.per = v; S.f.limit = 60; renderTxList(); };
 A.fJenis = v => { S.f.jenis = v; S.f.limit = 60; PAGES.transaksi(); };
 A.fRek = v => { S.f.rek = v; S.f.limit = 60; renderTxList(); };
+A.fSis = v => { S.f.sis = v; S.f.limit = 60; renderTxList(); };
 A.fStatus = v => { S.f.status = v; S.f.limit = 60; renderTxList(); };
 let _qt = null;
 A.fQ = v => { S.f.q = v; clearTimeout(_qt); _qt = setTimeout(() => { S.f.limit = 60; renderTxList(); }, 150); };
@@ -562,7 +569,7 @@ A.detailTx = id => {
   const kat = S.I.kat[t.KategoriID], sd = S.I.sd[t.SumberDanaID];
   const kv = [['No. Bukti', t.NoBukti], ['Tanggal', fmtTgl(t.Tanggal)], ['Jenis', jenisLabel(t)], ['Kas', ketKas(t)], ['Jumlah', '<b>' + rp(t.Jumlah) + '</b>'],
     ['Kategori', kat ? esc(kat.Nama) : ''], ['Sumber dana', sd ? esc(sd.Nama) : ''], ['Kegiatan', esc(t.Kegiatan)], ['Diserahkan kepada', esc(t.DiserahkanKepada)],
-    ['Uraian', esc(t.Uraian)], ['Keterangan', esc(t.Keterangan)], ['Status', pill(STATUS_TX[t.Status][0], STATUS_TX[t.Status][1])], ['Dicatat oleh', esc(t.DibuatOleh)],
+    ['Uraian', esc(t.Uraian)], ['Keterangan', esc(t.Keterangan)], ['Pencairan Siskeudes', t.Jenis === 'KELUAR' && !t.KoreksiDari && t.Siskeudes ? (t.Siskeudes === 'SUDAH' ? pill('ok', 'Sudah dicairkan' + (t.TglSiskeudes ? ' · ' + fmtTgl(t.TglSiskeudes) : '')) : pill('wr', 'Belum dicairkan')) : ''], ['Status', pill(STATUS_TX[t.Status][0], STATUS_TX[t.Status][1])], ['Dicatat oleh', esc(t.DibuatOleh)],
     ['Diverifikasi', t.DiverifikasiOleh ? esc(t.DiverifikasiOleh) + ' · ' + esc((t.DiverifikasiPada || '').slice(0, 16)) : ''], ['Catatan', t.Catatan ? '<span style="color:var(--danger)">' + esc(t.Catatan) + '</span>' : '']];
   if (t.KoreksiDari && S.I.tx[t.KoreksiDari]) kv.push(['Koreksi atas', esc(S.I.tx[t.KoreksiDari].NoBukti)]);
   if (t.DikoreksiID && S.I.tx[t.DikoreksiID]) kv.push(['Dikoreksi oleh', esc(S.I.tx[t.DikoreksiID].NoBukti)]);
@@ -590,6 +597,7 @@ A.detailTx = id => {
     f.push('<button class="btn dng" onclick="A.tolakTx(\'' + t.ID + '\')">Tolak</button>');
     f.push('<button class="btn pri" onclick="A.verifTx(\'' + t.ID + '\')">' + icon('check') + 'Verifikasi</button>');
   }
+  if (can('BENDAHARA') && t.Jenis === 'KELUAR' && !t.KoreksiDari && !t.DikoreksiID && t.Siskeudes) f.push(t.Siskeudes === 'SUDAH' ? '<button class="btn" onclick="A.setSis([\'' + t.ID + '\'],[],\'BELUM\')">Tandai belum cair Siskeudes</button>' : '<button class="btn" onclick="A.tandaSis(\'' + t.ID + '\')">Tandai sudah cair Siskeudes</button>');
   if (can('BENDAHARA') && t.Status === 'VERIFIED' && !t.KoreksiDari && !t.DikoreksiID) f.push('<button class="btn" onclick="A.koreksiTx(\'' + t.ID + '\')">Buat koreksi</button>');
   Modal.open({ title: jenisLabel(t), body: body, footer: f.join(''), wide: false });
 };
@@ -683,6 +691,7 @@ A.formTx = (jenis, id) => {
   b += '<div class="field"><label for="fJml">Jumlah (Rp)</label>' + moneyInput('fJml', t && t.Jumlah) + '</div>';
   b += '<div class="field"><label for="fUr">Uraian</label><textarea class="inp" id="fUr" maxlength="300" placeholder="' + (jenis === 'TERIMA' ? 'Mis. Transfer Dana Desa tahap I' : jenis === 'SETOR' ? 'Mis. Setor sisa kas tunai ke bank' : 'Mis. Belanja ATK kantor desa') + '">' + esc(t ? t.Uraian : '') + '</textarea></div>';
   if (jenis === 'KELUAR') b += '<div class="field"><label for="fKeg">Kegiatan (opsional)</label><input class="inp" id="fKeg" maxlength="150" value="' + esc(t ? t.Kegiatan : '') + '"></div><div class="field"><label for="fKpd">Dibayarkan kepada (opsional)</label><input class="inp" id="fKpd" maxlength="100" value="' + esc(t ? t.DiserahkanKepada : '') + '"></div>';
+  if (jenis === 'KELUAR') b += '<div class="field"><label for="fSis">Pencairan di Siskeudes</label><select class="inp" id="fSis"><option value="BELUM"' + (!t || t.Siskeudes !== 'SUDAH' ? ' selected' : '') + '>Belum dicairkan</option><option value="SUDAH"' + (t && t.Siskeudes === 'SUDAH' ? ' selected' : '') + '>Sudah dicairkan di Siskeudes</option></select></div>';
   b += lampiranField(t);
   Modal.open({ title: (t ? 'Ubah ' : 'Catat ') + JENIS[jenis], body: b, footer: '<button class="btn" onclick="A.tutupModal()">Batal</button><button class="btn pri" id="btnSimpan" onclick="A.submitTx(\'' + jenis + '\',\'' + (id || '') + '\',this)">Simpan</button>' });
 };
@@ -694,7 +703,7 @@ A.submitTx = (jenis, id, btn) => withBusy(btn, async () => {
   if (!jml) throw new Error('Isi jumlah.');
   if (!$('#fUr').value.trim()) throw new Error('Uraian wajib diisi.');
   const bukti = await bacaBukti($('#fFile'));
-  const p = { id: id || '', jenis: jenis, tanggal: $('#fTgl').value, rekeningId: jenis === 'SETOR' ? 'BANK' : segVal('fRek'), kategoriId: jenis === 'SETOR' ? '' : $('#fKat').value, sumberDanaId: jenis === 'SETOR' ? '' : $('#fSd').value, jumlah: jml, uraian: $('#fUr').value.trim(), kegiatan: $('#fKeg') ? $('#fKeg').value : '', diserahkanKepada: $('#fKpd') ? $('#fKpd').value : '', bukti: bukti, hapusBukti: !!($('#fHapusBukti') && $('#fHapusBukti').checked) };
+  const p = { id: id || '', jenis: jenis, siskeudes: jenis === 'KELUAR' ? $('#fSis').value : '', tanggal: $('#fTgl').value, rekeningId: jenis === 'SETOR' ? 'BANK' : segVal('fRek'), kategoriId: jenis === 'SETOR' ? '' : $('#fKat').value, sumberDanaId: jenis === 'SETOR' ? '' : $('#fSd').value, jumlah: jml, uraian: $('#fUr').value.trim(), kegiatan: $('#fKeg') ? $('#fKeg').value : '', diserahkanKepada: $('#fKpd') ? $('#fKpd').value : '', bukti: bukti, hapusBukti: !!($('#fHapusBukti') && $('#fHapusBukti').checked) };
   const res = await api('simpanTransaksi', p);
   applyDelta(res.data.delta); S.f.per = p.tanggal.slice(0, 7); Modal.closeAll(); toast(res.message, 'ok'); rerender();
 });
@@ -717,6 +726,7 @@ function salurRowHtml(d) {
     + '<input class="inp sl-kpd" placeholder="Pelaksana / penerima uang" maxlength="100" aria-label="Pelaksana atau penerima" value="' + esc(d.DiserahkanKepada || '') + '">'
     + '<div class="row"><input class="inp money grow sl-jml" inputmode="numeric" placeholder="Jumlah (Rp)" autocomplete="off" value="' + (d.Jumlah ? fmtNum(d.Jumlah) : '') + '" oninput="A.fmtMoney(this);A.hitungTarik()">'
     + '<select class="inp grow sl-kat" aria-label="Kategori">' + opt(kats, d.KategoriID, k => k.Nama, 'Kategori…') + '</select></div>'
+    + '<select class="inp sl-sis" aria-label="Pencairan di Siskeudes"><option value="BELUM"' + (d.Siskeudes === 'SUDAH' ? '' : ' selected') + '>Siskeudes: belum dicairkan</option><option value="SUDAH"' + (d.Siskeudes === 'SUDAH' ? ' selected' : '') + '>Siskeudes: sudah dicairkan</option></select>'
     + '<select class="inp sl-st" aria-label="Status penyerahan" onchange="A.hitungTarik()"><option value="1"' + (belum ? '' : ' selected') + '>Sudah diserahkan ke pelaksana</option><option value="0"' + (belum ? ' selected' : '') + '>Belum diserahkan (tetap di kas tunai)</option></select></div>';
 }
 A.tambahSalurRow = () => { $('#salurRows').insertAdjacentHTML('beforeend', salurRowHtml()); A.hitungTarik(); };
@@ -763,7 +773,7 @@ A.submitTarik = (id, btn) => withBusy(btn, async () => {
     if (!kpd) throw new Error('Isi nama penerima uang pada setiap baris kegiatan.');
     if (!jm) throw new Error('Isi jumlah pada setiap baris kegiatan.');
     if (!kt) throw new Error('Pilih kategori pada setiap baris kegiatan.');
-    penyaluran.push({ kegiatan: keg, diserahkanKepada: kpd, jumlah: jm, kategoriId: kt, serah: $('.sl-st', r).value !== '0' });
+    penyaluran.push({ kegiatan: keg, diserahkanKepada: kpd, jumlah: jm, kategoriId: kt, serah: $('.sl-st', r).value !== '0', siskeudes: $('.sl-sis', r).value });
   }
   const pajak = $$('.taxrow').map(r => ({ jenisPajakId: $('.tx-jp', r).value, jumlah: moneyVal($('.tx-jml', r)), uraian: $('.tx-ur', r).value }));
   for (const x of pajak) { if (!x.jenisPajakId) throw new Error('Pilih jenis pajak pada setiap baris potongan.'); if (!x.jumlah) throw new Error('Isi jumlah pada setiap baris potongan pajak.'); }
@@ -793,6 +803,38 @@ A.submitSerah = btn => withBusy(btn, async () => {
   const res = await api('serahkanDana', { ids: ids, tanggal: $('#srTgl').value });
   applyDelta(res.data.delta); Modal.closeAll(); toast(res.message, 'ok'); rerender();
 });
+
+// ── Status pencairan di Siskeudes ──
+A.formSis = () => {
+  const c = S.calc, bend = can('BENDAHARA');
+  const items = c.sisTx.map(x => ({ k: 'tx', id: x.ID, t: x.Kegiatan || x.Uraian, s: x.NoBukti + ' · ' + fmtTgl(x.Tanggal), j: x.Jumlah }))
+    .concat(c.sisSl.map(x => ({ k: 'sl', id: x.ID, t: x.Kegiatan, s: x.DiserahkanKepada + ' · belum diserahkan', j: x.Jumlah })));
+  if (!items.length) { toast('Semua sudah dicairkan di Siskeudes.', 'ok'); return; }
+  const b = '<div class="list mb">' + items.map(x => '<label class="item" style="min-height:0">' + (bend ? '<input type="checkbox" class="chk ss-chk" data-k="' + x.k + '" value="' + x.id + '" data-j="' + x.j + '" onchange="A.hitungSis()">' : '')
+    + '<span class="grow"><span class="t1">' + esc(x.t) + '</span><span class="t2"><span>' + esc(x.s) + '</span></span></span><span class="amt">' + fmtNum(x.j) + '</span></label>').join('') + '</div>'
+    + (bend ? '<div class="field"><label for="ssTgl">Tanggal pencairan di Siskeudes</label><input class="inp" type="date" id="ssTgl" value="' + hariIni() + '"></div><div class="sum" id="ssSum"></div>' : '<div class="hint">Hanya Bendahara yang dapat menandai pencairan.</div>');
+  Modal.open({ title: 'Belum dicairkan di Siskeudes', body: b, footer: '<button class="btn" onclick="A.tutupModal()">Tutup</button>' + (bend ? '<button class="btn pri" onclick="A.submitSis(this)">Tandai sudah dicairkan</button>' : '') });
+  if (bend) A.hitungSis();
+};
+A.hitungSis = () => { let n = 0, t = 0; $$('.ss-chk:checked').forEach(e => { n++; t += +e.dataset.j; }); const el = $('#ssSum'); if (el) el.innerHTML = '<div><span>' + n + ' dipilih</span><b>' + rp(t) + '</b></div>'; };
+A.submitSis = btn => withBusy(btn, async () => {
+  const cs = $$('.ss-chk:checked');
+  if (!cs.length) throw new Error('Pilih yang sudah dicairkan di Siskeudes.');
+  const res = await api('setSiskeudes', { tx: cs.filter(e => e.dataset.k === 'tx').map(e => e.value), salur: cs.filter(e => e.dataset.k === 'sl').map(e => e.value), status: 'SUDAH', tanggal: $('#ssTgl').value });
+  applyDelta(res.data.delta); Modal.closeAll(); toast(res.message, 'ok'); rerender();
+});
+A.setSis = (tx, sl, status, tanggal) => { Modal.closeAll(); return withBusy(null, async () => {
+  const res = await api('setSiskeudes', { tx: tx, salur: sl, status: status, tanggal: tanggal || '' });
+  applyDelta(res.data.delta); toast(res.message, 'ok'); rerender();
+}); };
+A.tandaSis = id => {
+  Modal.closeAll();
+  const ov = Modal.open({ title: 'Sudah dicairkan di Siskeudes', body: '<div class="field"><label for="ssTgl1">Tanggal pencairan</label><input class="inp" type="date" id="ssTgl1" value="' + hariIni() + '"></div>', footer: '<button class="btn" onclick="A.tutupModal()">Batal</button><button class="btn pri" data-ok>Simpan</button>' });
+  $('[data-ok]', ov).onclick = function () { withBusy(this, async () => {
+    const res = await api('setSiskeudes', { tx: [id], salur: [], status: 'SUDAH', tanggal: $('#ssTgl1').value });
+    applyDelta(res.data.delta); Modal.closeAll(); toast(res.message, 'ok'); rerender();
+  }); };
+};
 
 // ── Pajak ──
 PAGES.pajak = function () {

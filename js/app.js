@@ -355,7 +355,7 @@ function renderChrome() {
   const grupMenu = ['menu', 'tutup', 'master', 'pengguna', 'pengaturan', 'audit'];
   $('#bnav').innerHTML = ids.map(id => {
     const on = id === 'menu' ? grupMenu.indexOf(p) >= 0 : p === id, b = badge(id);
-    return '<button class="' + (on ? 'on' : '') + '" onclick="A.go(\'' + id + '\')">' + icon(ic[id]) + '<span>' + lbl[id] + '</span>' + (b ? '<span class="dot">' + b + '</span>' : '') + '</button>';
+    return '<button class="' + (on ? 'on' : '') + '" onclick="A.go(\'' + id + '\')"' + (on ? ' aria-current="page"' : '') + '><i class="pb">' + icon(ic[id]) + '</i><span>' + lbl[id] + '</span>' + (b ? '<span class="dot">' + b + '</span>' : '') + '</button>';
   }).join('');
   $('#fab').classList.toggle('hide', !(can('BENDAHARA') && p === 'transaksi'));
 }
@@ -400,7 +400,7 @@ function listHari(arr) {
   return h;
 }
 function kpi(label, ic, val, sub, cls, click) {
-  return '<div class="kpi ' + (cls || '') + '"' + (click ? ' style="cursor:pointer" onclick="' + click + '"' : '') + '><div class="k-l">' + (ic ? icon(ic, 'sm') : '') + esc(label) + '</div><div class="k-v">' + String(val).replace(/^Rp /, '<span class="cur">Rp</span> ') + '</div>' + (sub ? '<div class="k-s">' + sub + '</div>' : '') + '</div>';
+  return '<div class="kpi ' + (cls || '') + '"' + (click ? ' role="button" tabindex="0" onclick="' + click + '"' : '') + '><div class="k-l">' + (ic ? '<span class="k-ic">' + icon(ic, 'sm') + '</span>' : '') + '<span>' + esc(label) + '</span></div><div class="k-v">' + String(val).replace(/^Rp /, '<span class="cur">Rp</span> ') + '</div>' + (sub ? '<div class="k-s">' + sub + '</div>' : '') + (click ? '<span class="k-go">' + icon('chev', 'sm') + '</span>' : '') + '</div>';
 }
 function skeleton(n) { let h = ''; for (let i = 0; i < (n || 4); i++) h += '<div class="skel mb"></div>'; return h; }
 
@@ -473,7 +473,7 @@ PAGES.dashboard = function () {
   const total = c.now.TUNAI + c.now.BANK, bebas = c.now.TUNAI - c.titipan - c.belumSerah;
   _seri = [];
   for (let i = 5; i >= 0; i--) { const q = prevPer(p, i), b = c.bulan[q] || { masuk: 0, keluar: 0 }; _seri.push({ l: BLN[+q.slice(5, 7) - 1], full: labelPer(q), m: Math.max(b.masuk, 0), k: Math.max(b.keluar, 0) }); }
-  const belumN = S.B.pajak.filter(x => x.Status === 'BELUM').length;
+  const belumN = S.B.pajak.filter(x => x.Status === 'BELUM').length, nSis = c.sisTx.length + c.sisSl.length;
   const ins = buatInsight();
   const recent = S.B.transaksi.slice().sort(urutTx).slice(0, 5);
   let h = '';
@@ -486,9 +486,9 @@ PAGES.dashboard = function () {
     + kpi('Penerimaan ' + shortPer(p), 'in', rp(m.masuk))
     + kpi('Pengeluaran ' + shortPer(p), 'out', rp(m.keluar))
     + '</div>';
+  h += '<div class="mt">' + kpi('Belum dicairkan di Siskeudes', 'file', rp(c.sisJml), nSis ? nSis + ' pengeluaran/kegiatan · ketuk untuk melihat' : 'Semua sudah dicairkan', nSis ? 'warn' : '', nSis ? 'A.formSis()' : '') + '</div>';
   if (c.titipan > 0) h += '<div class="mt">' + kpi('Titipan pajak belum disetor', 'percent', rp(c.titipan), belumN + ' potongan · ketuk untuk melihat', 'warn', 'A.go(\'pajak\')') + '</div>';
   if (c.belumSerah > 0) h += '<div class="mt">' + kpi('Dana kegiatan belum diserahkan', 'users', rp(c.belumSerah), S.B.penyaluran.filter(x => x.Status === 'BELUM').length + ' kegiatan · ketuk untuk melihat', 'warn', 'A.formSerah()') + '</div>';
-  if (c.sisTx.length + c.sisSl.length > 0) h += '<div class="mt">' + kpi('Belum dicairkan di Siskeudes', 'file', rp(c.sisJml), (c.sisTx.length + c.sisSl.length) + ' kegiatan/pengeluaran · ketuk untuk melihat', 'warn', 'A.formSis()') + '</div>';
   if (can('BENDAHARA')) h += '<div class="sectionhead"><h2>Catat cepat</h2></div><div class="chooser">' + chooserBtns() + '</div>';
   h += '<div class="sectionhead"><h2>Tren 6 bulan</h2><div class="legend"><span><i style="background:var(--accent)"></i>Terima</span><span><i style="background:var(--muted);opacity:.55"></i>Keluar</span></div></div>'
     + '<div class="card">' + chartSvg(_seri) + '<div class="xs muted center" id="chartCap">Ketuk batang untuk melihat nilainya</div></div>';
@@ -1018,13 +1018,13 @@ A.submitOpname = btn => withBusy(btn, async () => {
 
 // ── Menu ──
 PAGES.menu = function () {
-  const it = (id, ic, t, s) => '<button class="menuitem" onclick="A.go(\'' + id + '\')"><span class="ico">' + icon(ic) + '</span><span class="grow">' + t + '<small>' + s + '</small></span>' + icon('more', 'sm') + '</button>';
-  let h = '<div class="card row"><span class="ico brand-mark" style="width:46px;height:46px">' + icon('users') + '</span><div><div class="bold">' + esc(S.user.nama) + '</div><div class="small muted">' + esc(S.user.username) + ' · ' + esc(ROLE[S.user.role]) + '</div></div></div>';
-  h += '<div class="list mt">' + it('tutup', 'lock', 'Tutup Bulan', 'Rekonsiliasi, kas opname, persetujuan periode');
-  if (isSU()) h += it('master', 'book', 'Master Data', 'Kategori, sumber dana, jenis pajak') + it('pengguna', 'users', 'Pengguna', 'Akun dan peran') + it('pengaturan', 'sliders', 'Pengaturan', 'Identitas desa, saldo awal') + it('audit', 'shield', 'Audit Log', 'Riwayat perubahan data');
-  h += '</div><div class="list mt"><button class="menuitem" onclick="A.formPassword()"><span class="ico">' + icon('shield') + '</span><span class="grow">Ganti password</span></button>'
-    + '<button class="menuitem" onclick="A.toggleTema()"><span class="ico">' + icon('moon') + '</span><span class="grow">Tema terang / gelap</span></button>'
-    + '<button class="menuitem" onclick="A.keluar()"><span class="ico">' + icon('logout') + '</span><span class="grow">Keluar</span></button></div>'
+  const tile = (id, ic, t, s) => '<button class="tile" onclick="A.go(\'' + id + '\')"><span class="ico">' + icon(ic) + '</span><b>' + t + '</b><small>' + s + '</small></button>';
+  const row = (fn, ic, t, s, cls) => '<button class="menuitem ' + (cls || '') + '" onclick="' + fn + '"><span class="ico">' + icon(ic) + '</span><span class="grow">' + t + (s ? '<small>' + s + '</small>' : '') + '</span>' + icon('chev', 'sm') + '</button>';
+  const nama = S.user.nama || S.user.username || '?', ini = nama.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  let h = '<div class="profile"><span class="avatar">' + esc(ini) + '</span><div class="grow"><div class="p-n ellipsis">' + esc(nama) + '</div><div class="p-s ellipsis">@' + esc(S.user.username) + ' · ' + esc(S.B.config.namaDesa || '') + '</div></div><span class="p-role">' + esc(ROLE[S.user.role]) + '</span></div>';
+  h += '<div class="sectionhead"><h2>Periode</h2></div><div class="tiles">' + tile('tutup', 'lock', 'Tutup Bulan', 'Rekonsiliasi &amp; persetujuan') + '</div>';
+  if (isSU()) h += '<div class="sectionhead"><h2>Administrasi</h2></div><div class="tiles">' + tile('master', 'book', 'Master Data', 'Kategori, sumber dana, pajak') + tile('pengguna', 'users', 'Pengguna', 'Akun dan peran') + tile('pengaturan', 'sliders', 'Pengaturan', 'Identitas desa, saldo awal') + tile('audit', 'shield', 'Audit Log', 'Riwayat perubahan') + '</div>';
+  h += '<div class="sectionhead"><h2>Akun</h2></div><div class="list">' + row('A.formPassword()', 'shield', 'Ganti password', '') + row('A.toggleTema()', 'moon', 'Tema terang / gelap', 'Ubah tampilan sesuai kenyamanan mata') + row('A.keluar()', 'logout', 'Keluar', '@' + esc(S.user.username), 'dng') + '</div>'
     + '<p class="xs muted center mt2">' + esc(S.B.config.appName || 'SIKADES') + ' v1.0</p>';
   V().innerHTML = h;
 };

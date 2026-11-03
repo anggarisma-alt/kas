@@ -395,3 +395,12 @@ table.tbl td.u { min-width: 220px; }
 .tiles .tile:only-child { grid-column: 1 / -1; min-height: 88px; }
 .tiles .tile:last-child:nth-child(odd):not(:only-child) { grid-column: 1 / -1; }
 @media (min-width: 700px) { .tiles .tile:last-child:nth-child(odd):not(:only-child) { grid-column: auto; } .tiles .tile:only-child { grid-column: 1 / 2; } }
+/* 6 item navigasi bawah */
+.bnav button { min-width: 0; font-size: 10.5px; }
+.bnav button .pb { width: 46px; }
+.bnav button .dot { left: calc(50% + 6px); }
+.item .btn.sm { flex: none; }
+div.item { cursor: default; }
+@media (max-width: 380px) { .item .btn.sm { padding: 6px 9px; } }
+.item.wrapi { flex-wrap: wrap; }
+.item .acts { flex-basis: 100%; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }

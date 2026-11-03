@@ -324,12 +324,12 @@ A.keluar = () => {
 // BAGIAN 4: NAVIGASI SPA
 // ════════════════════════════════════════════════════════
 const NAV = [
-  { id: 'dashboard', l: 'Beranda', i: 'home' }, { id: 'transaksi', l: 'Transaksi', i: 'list' }, { id: 'pajak', l: 'Pajak', i: 'percent' },
+  { id: 'dashboard', l: 'Beranda', i: 'home' }, { id: 'transaksi', l: 'Transaksi', i: 'list' }, { id: 'kasbank', l: 'Kas Bank', i: 'bank' }, { id: 'kastunai', l: 'Kas Tunai', i: 'wallet' }, { id: 'siskeudes', l: 'Status Siskeudes', i: 'file' }, { id: 'pajak', l: 'Pajak', i: 'percent' },
   { id: 'laporan', l: 'Laporan', i: 'file' }, { id: 'tutup', l: 'Tutup Bulan', i: 'lock', desk: true },
   { id: 'master', l: 'Master Data', i: 'book', su: true, desk: true }, { id: 'pengguna', l: 'Pengguna', i: 'users', su: true, desk: true },
   { id: 'pengaturan', l: 'Pengaturan', i: 'sliders', su: true, desk: true }, { id: 'audit', l: 'Audit Log', i: 'shield', su: true, desk: true }
 ];
-const TITLES = { dashboard: 'Beranda', transaksi: 'Transaksi Kas', pajak: 'Pajak', laporan: 'Laporan', tutup: 'Tutup Bulan', menu: 'Menu', master: 'Master Data', pengguna: 'Pengguna', pengaturan: 'Pengaturan', audit: 'Audit Log' };
+const TITLES = { dashboard: 'Beranda', transaksi: 'Transaksi Kas', kasbank: 'Kas Bank', kastunai: 'Kas Tunai', siskeudes: 'Status Siskeudes', pajak: 'Pajak', laporan: 'Laporan', tutup: 'Tutup Bulan', menu: 'Menu', master: 'Master Data', pengguna: 'Pengguna', pengaturan: 'Pengaturan', audit: 'Audit Log' };
 function badge(id) {
   if (!S.B) return 0;
   if (id === 'transaksi') {
@@ -338,6 +338,9 @@ function badge(id) {
     if (can('BENDAHARA') && !can('SEKDES')) return tl;
     return dr + tl;
   }
+  if (id === 'kastunai' && can('BENDAHARA')) return S.B.penyaluran.filter(x => x.Status === 'BELUM').length;
+  if (id === 'siskeudes' && can('BENDAHARA')) return S.calc.sisTx.length + S.calc.sisSl.length;
+  if (id === 'menu') return badge('pajak');
   if (id === 'pajak' && can('BENDAHARA')) return S.B.pajak.filter(x => x.Status === 'BELUM').length;
   return 0;
 }
@@ -351,13 +354,13 @@ function renderChrome() {
     + nv.map(n => { const b = badge(n.id); return '<button class="nv ' + (p === n.id ? 'on' : '') + '" onclick="A.go(\'' + n.id + '\')">' + icon(n.i) + '<span class="grow">' + n.l + '</span>' + (b ? '<span class="pill bad">' + b + '</span>' : '') + '</button>'; }).join('')
     + '<div class="sep"></div><button class="nv" onclick="A.formPassword()">' + icon('shield') + 'Ganti password</button>'
     + '<button class="nv" onclick="A.toggleTema()">' + icon('moon') + 'Tema terang/gelap</button><button class="nv" onclick="A.keluar()">' + icon('logout') + 'Keluar (' + esc(S.user.username) + ')</button>';
-  const ids = ['dashboard', 'transaksi', 'pajak', 'laporan', 'menu'], lbl = { dashboard: 'Beranda', transaksi: 'Transaksi', pajak: 'Pajak', laporan: 'Laporan', menu: 'Menu' }, ic = { dashboard: 'home', transaksi: 'list', pajak: 'percent', laporan: 'file', menu: 'more' };
-  const grupMenu = ['menu', 'tutup', 'master', 'pengguna', 'pengaturan', 'audit'];
+  const ids = ['dashboard', 'transaksi', 'kasbank', 'kastunai', 'siskeudes', 'menu'], lbl = { dashboard: 'Beranda', transaksi: 'Transaksi', kasbank: 'Bank', kastunai: 'Tunai', siskeudes: 'Siskeudes', menu: 'Menu' }, ic = { dashboard: 'home', transaksi: 'list', kasbank: 'bank', kastunai: 'wallet', siskeudes: 'file', menu: 'more' };
+  const grupMenu = ['menu', 'pajak', 'laporan', 'tutup', 'master', 'pengguna', 'pengaturan', 'audit'];
   $('#bnav').innerHTML = ids.map(id => {
     const on = id === 'menu' ? grupMenu.indexOf(p) >= 0 : p === id, b = badge(id);
     return '<button class="' + (on ? 'on' : '') + '" onclick="A.go(\'' + id + '\')"' + (on ? ' aria-current="page"' : '') + '><i class="pb">' + icon(ic[id]) + '</i><span>' + lbl[id] + '</span>' + (b ? '<span class="dot">' + b + '</span>' : '') + '</button>';
   }).join('');
-  $('#fab').classList.toggle('hide', !(can('BENDAHARA') && p === 'transaksi'));
+  $('#fab').classList.toggle('hide', !(can('BENDAHARA') && (p === 'transaksi' || p === 'kasbank' || p === 'kastunai')));
 }
 function go(page, opt) {
   opt = opt || {};
@@ -443,13 +446,13 @@ function buatInsight() {
     const tua = Math.max.apply(null, belum.map(x => diffHari(x.TanggalPotong, hariIni())));
     out.push({ w: tua > 14, t: belum.length + ' potongan pajak senilai ' + rp(c.titipan) + ' belum disetor' + (tua > 0 ? ' (yang tertua ' + tua + ' hari)' : '') + '.' });
     const bebas = c.now.TUNAI - c.titipan - c.belumSerah;
-    out.push({ w: bebas < 0, t: 'Dari kas tunai ' + rp(c.now.TUNAI) + ', ' + rp(c.titipan) + ' adalah titipan pajak' + (c.belumSerah > 0 ? ' dan ' + rp(c.belumSerah) + ' dana kegiatan belum diserahkan' : '') + '. Dana tunai yang bebas dipakai: ' + rp(bebas) + '.' });
+    out.push({ w: bebas < 0, t: 'Dari kas tunai ' + rp(c.now.TUNAI) + ', ' + rp(c.titipan) + ' adalah titipan pajak' + (c.belumSerah > 0 ? ' dan ' + rp(c.belumSerah) + ' dana kegiatan yang belum dicairkan di Siskeudes' : '') + '. Dana tunai yang bebas dipakai: ' + rp(bebas) + '.' });
   }
   if (c.sisTx.length + c.sisSl.length) out.push({ t: (c.sisTx.length + c.sisSl.length) + ' kegiatan/pengeluaran senilai ' + rp(c.sisJml) + ' belum dicairkan di Siskeudes.' });
   const bs = S.B.penyaluran.filter(x => x.Status === 'BELUM');
   if (bs.length) {
     const tua2 = Math.max.apply(null, bs.map(x => diffHari(x.Tanggal, hariIni())));
-    out.push({ w: tua2 > 14, t: bs.length + ' kegiatan senilai ' + rp(c.belumSerah) + ' dananya belum diserahkan ke pelaksana (yang tertua ' + tua2 + ' hari di kas tunai).' });
+    out.push({ w: tua2 > 14, t: bs.length + ' kegiatan senilai ' + rp(c.belumSerah) + ' dananya belum dicairkan di Siskeudes (yang tertua ' + tua2 + ' hari di kas tunai).' });
   }
   const dr = S.B.transaksi.filter(t => t.Status === 'DRAFT').length, tl = S.B.transaksi.filter(t => t.Status === 'DITOLAK').length;
   if (dr) out.push({ t: dr + ' transaksi menunggu verifikasi Sekretaris Desa.' });
@@ -481,14 +484,14 @@ PAGES.dashboard = function () {
   h += '<div class="row mb"><div class="grow">' + perSelect('A.setPer', p) + '</div>' + pill(STATUS_PER[st][0], 'Periode ' + STATUS_PER[st][1].toLowerCase()) + '</div>';
   h += '<div class="grid g2">'
     + kpi('Total kas saat ini', 'coins', rp(total), 'Bank + tunai per ' + fmtTgl(hariIni()), 'hero')
-    + kpi('Kas Bank', 'bank', rp(c.now.BANK))
-    + kpi('Kas Tunai', 'wallet', rp(c.now.TUNAI), c.titipan + c.belumSerah > 0 ? 'Bebas dipakai ' + rp(bebas) : '')
+    + kpi('Kas Bank', 'bank', rp(c.now.BANK), '', '', 'A.go(\'kasbank\')')
+    + kpi('Kas Tunai', 'wallet', rp(c.now.TUNAI), c.titipan + c.belumSerah > 0 ? 'Bebas dipakai ' + rp(bebas) : '', '', 'A.go(\'kastunai\')')
     + kpi('Penerimaan ' + shortPer(p), 'in', rp(m.masuk))
     + kpi('Pengeluaran ' + shortPer(p), 'out', rp(m.keluar))
     + '</div>';
-  h += '<div class="mt">' + kpi('Belum dicairkan di Siskeudes', 'file', rp(c.sisJml), nSis ? nSis + ' pengeluaran/kegiatan · ketuk untuk melihat' : 'Semua sudah dicairkan', nSis ? 'warn' : '', nSis ? 'A.formSis()' : '') + '</div>';
+  h += '<div class="mt">' + kpi('Belum dicairkan di Siskeudes', 'file', rp(c.sisJml), nSis ? nSis + ' pengeluaran/kegiatan · ketuk untuk melihat' : 'Semua sudah dicairkan', nSis ? 'warn' : '', 'A.go(\'siskeudes\')') + '</div>';
   if (c.titipan > 0) h += '<div class="mt">' + kpi('Titipan pajak belum disetor', 'percent', rp(c.titipan), belumN + ' potongan · ketuk untuk melihat', 'warn', 'A.go(\'pajak\')') + '</div>';
-  if (c.belumSerah > 0) h += '<div class="mt">' + kpi('Dana kegiatan belum diserahkan', 'users', rp(c.belumSerah), S.B.penyaluran.filter(x => x.Status === 'BELUM').length + ' kegiatan · ketuk untuk melihat', 'warn', 'A.formSerah()') + '</div>';
+  if (c.belumSerah > 0) h += '<div class="mt">' + kpi('Dana kegiatan belum dicairkan (di kas tunai)', 'users', rp(c.belumSerah), S.B.penyaluran.filter(x => x.Status === 'BELUM').length + ' kegiatan · ketuk untuk melihat', 'warn', 'A.go(\'kastunai\')') + '</div>';
   if (can('BENDAHARA')) h += '<div class="sectionhead"><h2>Catat cepat</h2></div><div class="chooser">' + chooserBtns() + '</div>';
   h += '<div class="sectionhead"><h2>Tren 6 bulan</h2><div class="legend"><span><i style="background:var(--accent)"></i>Terima</span><span><i style="background:var(--muted);opacity:.55"></i>Keluar</span></div></div>'
     + '<div class="card">' + chartSvg(_seri) + '<div class="xs muted center" id="chartCap">Ketuk batang untuk melihat nilainya</div></div>';
@@ -581,7 +584,7 @@ A.detailTx = id => {
   let sl = [];
   if (t.GrupID && t.Jenis === 'TARIK') sl = S.B.penyaluran.filter(x => x.GrupID === t.GrupID && x.Status !== 'BATAL');
   if (t.Jenis === 'KELUAR') sl = S.B.penyaluran.filter(x => x.TransaksiSerahID === t.ID);
-  if (sl.length) body += '<div class="sectionhead"><h2>Dana kegiatan belum / sudah diserahkan</h2></div><div class="list">' + sl.map(x => '<div class="item" style="min-height:0"><span class="grow"><span class="t1">' + esc(x.Kegiatan) + ' — ' + esc(x.DiserahkanKepada) + '</span><span class="t2">' + (x.Status === 'SUDAH' ? pill('ok', 'Diserahkan ' + fmtTgl(x.TanggalSerah)) : pill('wr', 'Belum diserahkan')) + '</span></span><span class="amt">' + fmtNum(x.Jumlah) + '</span></div>').join('') + '</div>';
+  if (sl.length) body += '<div class="sectionhead"><h2>Dana kegiatan</h2></div><div class="list">' + sl.map(x => '<div class="item" style="min-height:0"><span class="grow"><span class="t1">' + esc(x.Kegiatan) + ' — ' + esc(x.DiserahkanKepada) + '</span><span class="t2">' + (x.Status === 'SUDAH' ? pill('ok', 'Dicairkan ' + fmtTgl(x.TanggalSerah)) : pill('wr', 'Belum dicairkan')) + (x.Serah === 'SUDAH' ? pill('', 'Diserahkan ' + fmtTgl(x.TglDiserahkan)) : '') + '</span></span><span class="amt">' + fmtNum(x.Jumlah) + '</span></div>').join('') + '</div>';
   if (t.BuktiID) body += '<button class="btn block mt" onclick="A.lihatBukti(\'' + t.ID + '\')">' + icon('eye') + 'Lihat lampiran (' + esc(t.BuktiNama || 'bukti') + ')</button>';
   const f = [];
   const editable = ['DRAFT', 'DITOLAK'].indexOf(t.Status) >= 0 && !t.KoreksiDari;
@@ -720,24 +723,23 @@ A.tambahPajakRow = () => { $('#taxRows').insertAdjacentHTML('beforeend', taxRowH
 function salurRowHtml(d) {
   d = d || {};
   const kats = S.B.kategori.filter(k => k.Jenis === 'KELUAR' && (k.Aktif !== 'N' || k.ID === d.KategoriID));
-  const belum = d.serah === false;
   return '<div class="salurrow"><div class="row"><input class="inp grow sl-keg" placeholder="Nama kegiatan" maxlength="150" aria-label="Nama kegiatan" value="' + esc(d.Kegiatan || '') + '">'
     + '<button type="button" class="iconbtn" aria-label="Hapus kegiatan" onclick="this.closest(\'.salurrow\').remove();A.hitungTarik()">' + icon('trash') + '</button></div>'
     + '<input class="inp sl-kpd" placeholder="Pelaksana / penerima uang" maxlength="100" aria-label="Pelaksana atau penerima" value="' + esc(d.DiserahkanKepada || '') + '">'
     + '<div class="row"><input class="inp money grow sl-jml" inputmode="numeric" placeholder="Jumlah (Rp)" autocomplete="off" value="' + (d.Jumlah ? fmtNum(d.Jumlah) : '') + '" oninput="A.fmtMoney(this);A.hitungTarik()">'
     + '<select class="inp grow sl-kat" aria-label="Kategori">' + opt(kats, d.KategoriID, k => k.Nama, 'Kategori…') + '</select></div>'
-    + '<select class="inp sl-sis" aria-label="Pencairan di Siskeudes"><option value="BELUM"' + (d.Siskeudes === 'SUDAH' ? '' : ' selected') + '>Siskeudes: belum dicairkan</option><option value="SUDAH"' + (d.Siskeudes === 'SUDAH' ? ' selected' : '') + '>Siskeudes: sudah dicairkan</option></select>'
-    + '<select class="inp sl-st" aria-label="Status penyerahan" onchange="A.hitungTarik()"><option value="1"' + (belum ? '' : ' selected') + '>Sudah diserahkan ke pelaksana</option><option value="0"' + (belum ? ' selected' : '') + '>Belum diserahkan (tetap di kas tunai)</option></select></div>';
+    + '<select class="inp sl-sis" aria-label="Pencairan di Siskeudes" onchange="A.hitungTarik()"><option value="BELUM"' + (d.Siskeudes === 'SUDAH' ? '' : ' selected') + '>Belum dicairkan di Siskeudes (uang tetap di kas tunai)</option><option value="SUDAH"' + (d.Siskeudes === 'SUDAH' ? ' selected' : '') + '>Sudah dicairkan di Siskeudes (kas tunai berkurang)</option></select>'
+    + '</div>';
 }
 A.tambahSalurRow = () => { $('#salurRows').insertAdjacentHTML('beforeend', salurRowHtml()); A.hitungTarik(); };
 A.hitungTarik = () => {
   const jml = moneyVal($('#fJml')); let pj = 0, sd = 0, bl = 0;
   $$('.tx-jml').forEach(e => { pj += moneyVal(e); });
-  $$('.salurrow').forEach(r => { const v = moneyVal($('.sl-jml', r)); if ($('.sl-st', r).value === '0') bl += v; else sd += v; });
+  $$('.salurrow').forEach(r => { const v = moneyVal($('.sl-jml', r)); if ($('.sl-sis', r).value === 'SUDAH') sd += v; else bl += v; });
   const sisa = jml - pj - sd - bl, neg = sisa < 0;
   $('#tarikSum').innerHTML = '<div><span>Jumlah ditarik dari bank</span><b>' + rp(jml) + '</b></div>'
-    + '<div><span>Sudah diserahkan ke pelaksana</span><b>' + rp(sd) + '</b></div>'
-    + '<div><span>Belum diserahkan (tetap di kas tunai)</span><b>' + rp(bl) + '</b></div>'
+    + '<div><span>Sudah dicairkan di Siskeudes (kas tunai berkurang)</span><b>' + rp(sd) + '</b></div>'
+    + '<div><span>Belum dicairkan (tetap di kas tunai)</span><b>' + rp(bl) + '</b></div>'
     + '<div><span>Potongan pajak (titipan di kas tunai)</span><b>' + rp(pj) + '</b></div>'
     + '<div style="border-top:1px solid var(--border);padding-top:6px"><span><b>' + (neg ? 'Kelebihan (tidak boleh)' : 'Masuk kas tunai bendahara') + '</b></span><b style="color:' + (neg ? 'var(--danger)' : 'var(--accent)') + '">' + rp(neg ? -sisa : jml - sd) + '</b></div>';
 };
@@ -745,18 +747,18 @@ A.formTarik = id => {
   Modal.closeAll();
   const t = id ? S.I.tx[id] : null;
   const pj = t ? S.B.pajak.filter(x => x.GrupID === t.GrupID && x.Status !== 'BATAL') : [];
-  const anak = t ? S.B.transaksi.filter(x => x.GrupID === t.GrupID && x.Jenis === 'KELUAR' && x.RekeningID === 'TUNAI').map(x => Object.assign({ serah: true }, x)).concat(S.B.penyaluran.filter(x => x.GrupID === t.GrupID && x.Status === 'BELUM').map(x => Object.assign({ serah: false }, x))) : [];
+  const anak = t ? S.B.transaksi.filter(x => x.GrupID === t.GrupID && x.Jenis === 'KELUAR' && x.RekeningID === 'TUNAI').concat(S.B.penyaluran.filter(x => x.GrupID === t.GrupID && x.Status === 'BELUM')) : [];
   const sds = S.B.sumberDana.filter(k => k.Aktif !== 'N' || (t && t.SumberDanaID === k.ID));
   const b = '<div class="field"><label for="fTgl">Tanggal penarikan</label><input class="inp" type="date" id="fTgl" value="' + (t ? t.Tanggal : hariIni()) + '"></div>'
     + '<div class="field"><label for="fJml">Jumlah ditarik dari bank (Rp)</label>' + moneyInput('fJml', t && t.Jumlah, 'A.hitungTarik()') + '</div>'
     + '<div class="field"><label for="fKeg">Keperluan penarikan (opsional)</label><input class="inp" id="fKeg" maxlength="150" placeholder="Mis. ADD Tahap I" value="' + esc(t && !/^Beberapa kegiatan|^Persediaan kas/.test(t.Kegiatan) && anak.length !== 1 ? t.Kegiatan : '') + '"></div>'
     + '<div class="field"><label for="fSd">Sumber dana (opsional)</label><select class="inp" id="fSd">' + opt(sds, t && t.SumberDanaID, k => k.Nama, '— Tidak ada —') + '</select></div>'
-    + '<div class="lbl">Diserahkan ke kegiatan (boleh lebih dari satu)</div><div id="salurRows">' + anak.map(salurRowHtml).join('') + (t ? '' : salurRowHtml()) + '</div>'
+    + '<div class="lbl">Untuk kegiatan (boleh lebih dari satu)</div><div id="salurRows">' + anak.map(salurRowHtml).join('') + (t ? '' : salurRowHtml()) + '</div>'
     + '<button type="button" class="btn sm mb" onclick="A.tambahSalurRow()">' + icon('plus', 'sm') + 'Tambah kegiatan</button>'
     + '<div class="lbl">Potongan pajak (opsional)</div><div id="taxRows">' + pj.map(taxRowHtml).join('') + '</div>'
     + '<button type="button" class="btn sm mb" onclick="A.tambahPajakRow()">' + icon('plus', 'sm') + 'Tambah potongan pajak</button>'
     + '<div class="sum mb" id="tarikSum"></div>'
-    + '<div class="hint mb">Setiap kegiatan dipilih “Sudah diserahkan” (kas tunai langsung berkurang) atau “Belum diserahkan” (uangnya tetap di kas tunai bendahara sampai diserahkan lewat Beranda). Uang tanpa peruntukan juga tetap di kas tunai. Pajak juga tetap di kas tunai sebagai “titipan pajak / pajak yang belum disetor” sampai dibayar.</div>'
+    + '<div class="hint mb">Seluruh uang yang ditarik masuk ke kas tunai bendahara. Kas tunai baru berkurang saat kegiatan dicairkan di Siskeudes (pilih “Sudah dicairkan” di sini, atau tekan Cairkan nanti di menu Kas Tunai / Status Siskeudes). Penyerahan ke pelaksana dicatat di menu Kas Tunai dan tidak mengubah saldo. Pajak juga tetap di kas tunai sebagai “titipan pajak / pajak yang belum disetor” sampai dibayar.</div>'
     + lampiranField(t);
   Modal.open({ title: t ? 'Ubah Tarik Tunai' : 'Tarik Tunai', wide: true, body: b, footer: '<button class="btn" onclick="A.tutupModal()">Batal</button><button class="btn pri" onclick="A.submitTarik(\'' + (id || '') + '\',this)">Simpan</button>' });
   A.hitungTarik();
@@ -773,7 +775,7 @@ A.submitTarik = (id, btn) => withBusy(btn, async () => {
     if (!kpd) throw new Error('Isi nama penerima uang pada setiap baris kegiatan.');
     if (!jm) throw new Error('Isi jumlah pada setiap baris kegiatan.');
     if (!kt) throw new Error('Pilih kategori pada setiap baris kegiatan.');
-    penyaluran.push({ kegiatan: keg, diserahkanKepada: kpd, jumlah: jm, kategoriId: kt, serah: $('.sl-st', r).value !== '0', siskeudes: $('.sl-sis', r).value });
+    penyaluran.push({ kegiatan: keg, diserahkanKepada: kpd, jumlah: jm, kategoriId: kt, siskeudes: $('.sl-sis', r).value });
   }
   const pajak = $$('.taxrow').map(r => ({ jenisPajakId: $('.tx-jp', r).value, jumlah: moneyVal($('.tx-jml', r)), uraian: $('.tx-ur', r).value }));
   for (const x of pajak) { if (!x.jenisPajakId) throw new Error('Pilih jenis pajak pada setiap baris potongan.'); if (!x.jumlah) throw new Error('Isi jumlah pada setiap baris potongan pajak.'); }
@@ -785,18 +787,18 @@ A.submitTarik = (id, btn) => withBusy(btn, async () => {
   applyDelta(res.data.delta); S.f.per = p.tanggal.slice(0, 7); Modal.closeAll(); toast(res.message, 'ok'); rerender();
 });
 
-// ── Serahkan dana kegiatan yang tadinya "belum diserahkan" ──
+// ── Catat penyerahan uang ke pelaksana (tidak mengubah saldo; kas tunai berkurang saat dicairkan di Siskeudes) ──
 A.formSerah = () => {
-  const arr = S.B.penyaluran.filter(x => x.Status === 'BELUM').sort((a, b) => a.Tanggal < b.Tanggal ? -1 : 1);
-  if (!arr.length) { toast('Tidak ada dana kegiatan yang belum diserahkan.', 'ok'); return; }
+  const arr = S.B.penyaluran.filter(x => x.Status === 'BELUM' && x.Serah !== 'SUDAH').sort((a, b) => a.Tanggal < b.Tanggal ? -1 : 1);
+  if (!arr.length) { toast('Semua dana kegiatan sudah dicatat diserahkan.', 'ok'); return; }
   const bend = can('BENDAHARA');
   const b = '<div class="list mb">' + arr.map(x => '<label class="item" style="min-height:0;cursor:' + (bend ? 'pointer' : 'default') + '">' + (bend ? '<input type="checkbox" class="chk sr-chk" value="' + x.ID + '" data-j="' + x.Jumlah + '" onchange="A.hitungSerah()">' : '')
     + '<span class="grow"><span class="t1">' + esc(x.Kegiatan) + '</span><span class="t2"><span>' + esc(x.DiserahkanKepada) + '</span><span>Ditarik ' + fmtTgl(x.Tanggal) + '</span>' + (diffHari(x.Tanggal, hariIni()) > 14 ? pill('bad', diffHari(x.Tanggal, hariIni()) + ' hari') : '') + '</span></span><span class="amt">' + fmtNum(x.Jumlah) + '</span></label>').join('') + '</div>'
     + (bend ? '<div class="field"><label for="srTgl">Tanggal penyerahan</label><input class="inp" type="date" id="srTgl" value="' + hariIni() + '"></div><div class="sum" id="srSum"></div>' : '<div class="hint">Hanya Bendahara yang dapat mencatat penyerahan.</div>');
-  Modal.open({ title: 'Dana kegiatan belum diserahkan', body: b, footer: '<button class="btn" onclick="A.tutupModal()">Tutup</button>' + (bend ? '<button class="btn pri" onclick="A.submitSerah(this)">Serahkan</button>' : '') });
+  Modal.open({ title: 'Catat penyerahan ke pelaksana', body: b, footer: '<button class="btn" onclick="A.tutupModal()">Tutup</button>' + (bend ? '<button class="btn pri" onclick="A.submitSerah(this)">Serahkan</button>' : '') });
   if (bend) A.hitungSerah();
 };
-A.hitungSerah = () => { let n = 0, t = 0; $$('.sr-chk:checked').forEach(e => { n++; t += +e.dataset.j; }); const el = $('#srSum'); if (el) el.innerHTML = '<div><span>' + n + ' kegiatan dipilih</span><b>' + rp(t) + '</b></div><div><span>Kas tunai berkurang</span><b>' + rp(t) + '</b></div>'; };
+A.hitungSerah = () => { let n = 0, t = 0; $$('.sr-chk:checked').forEach(e => { n++; t += +e.dataset.j; }); const el = $('#srSum'); if (el) el.innerHTML = '<div><span>' + n + ' kegiatan dipilih</span><b>' + rp(t) + '</b></div><div><span>Kas tunai tidak berubah</span><b>tetap sampai dicairkan</b></div>'; };
 A.submitSerah = btn => withBusy(btn, async () => {
   const ids = $$('.sr-chk:checked').map(e => e.value);
   if (!ids.length) throw new Error('Pilih kegiatan yang sudah diserahkan.');
@@ -808,7 +810,7 @@ A.submitSerah = btn => withBusy(btn, async () => {
 A.formSis = () => {
   const c = S.calc, bend = can('BENDAHARA');
   const items = c.sisTx.map(x => ({ k: 'tx', id: x.ID, t: x.Kegiatan || x.Uraian, s: x.NoBukti + ' · ' + fmtTgl(x.Tanggal), j: x.Jumlah }))
-    .concat(c.sisSl.map(x => ({ k: 'sl', id: x.ID, t: x.Kegiatan, s: x.DiserahkanKepada + ' · belum diserahkan', j: x.Jumlah })));
+    .concat(c.sisSl.map(x => ({ k: 'sl', id: x.ID, t: x.Kegiatan, s: x.DiserahkanKepada + ' · kas tunai berkurang', j: x.Jumlah })));
   if (!items.length) { toast('Semua sudah dicairkan di Siskeudes.', 'ok'); return; }
   const b = '<div class="list mb">' + items.map(x => '<label class="item" style="min-height:0">' + (bend ? '<input type="checkbox" class="chk ss-chk" data-k="' + x.k + '" value="' + x.id + '" data-j="' + x.j + '" onchange="A.hitungSis()">' : '')
     + '<span class="grow"><span class="t1">' + esc(x.t) + '</span><span class="t2"><span>' + esc(x.s) + '</span></span></span><span class="amt">' + fmtNum(x.j) + '</span></label>').join('') + '</div>'
@@ -816,7 +818,7 @@ A.formSis = () => {
   Modal.open({ title: 'Belum dicairkan di Siskeudes', body: b, footer: '<button class="btn" onclick="A.tutupModal()">Tutup</button>' + (bend ? '<button class="btn pri" onclick="A.submitSis(this)">Tandai sudah dicairkan</button>' : '') });
   if (bend) A.hitungSis();
 };
-A.hitungSis = () => { let n = 0, t = 0; $$('.ss-chk:checked').forEach(e => { n++; t += +e.dataset.j; }); const el = $('#ssSum'); if (el) el.innerHTML = '<div><span>' + n + ' dipilih</span><b>' + rp(t) + '</b></div>'; };
+A.hitungSis = () => { let n = 0, t = 0; $$('.ss-chk:checked').forEach(e => { n++; t += +e.dataset.j; }); const el = $('#ssSum'); let kt = 0; $$('.ss-chk:checked').forEach(e => { if (e.dataset.k === 'sl') kt += +e.dataset.j; }); if (el) el.innerHTML = '<div><span>' + n + ' dipilih</span><b>' + rp(t) + '</b></div>' + (kt ? '<div><span>Kas tunai berkurang</span><b>' + rp(kt) + '</b></div>' : ''); };
 A.submitSis = btn => withBusy(btn, async () => {
   const cs = $$('.ss-chk:checked');
   if (!cs.length) throw new Error('Pilih yang sudah dicairkan di Siskeudes.');
@@ -834,6 +836,95 @@ A.tandaSis = id => {
     const res = await api('setSiskeudes', { tx: [id], salur: [], status: 'SUDAH', tanggal: $('#ssTgl1').value });
     applyDelta(res.data.delta); Modal.closeAll(); toast(res.message, 'ok'); rerender();
   }); };
+};
+
+
+// ════════════════════════════════════════════════════════
+// HALAMAN KAS BANK, KAS TUNAI, STATUS SISKEUDES
+// ════════════════════════════════════════════════════════
+S.kf = S.kf || { per: '', q: '', tab: 'BELUM' };
+function kasToolbar(ph) {
+  return '<div class="toolbar t2">' + perSelect('A.kPer', S.kf.per || 'ALL', true)
+    + '<div class="grow" style="position:relative"><input class="inp" type="search" placeholder="' + ph + '" value="' + esc(S.kf.q) + '" oninput="A.kQ(this.value)" style="padding-left:38px"><span style="position:absolute;left:12px;top:13px;color:var(--muted)">' + icon('search') + '</span></div></div>';
+}
+function kasRiwayat(rek) {
+  const f = S.kf, q = f.q.trim().toLowerCase();
+  const arr = S.B.transaksi.filter(t => {
+    if (f.per && f.per !== 'ALL' && t.Periode !== f.per) return false;
+    if (efek(t)[rek] === 0) return false;
+    if (q && (t.Uraian + ' ' + t.NoBukti + ' ' + t.Kegiatan + ' ' + t.DiserahkanKepada + ' ' + t.Keterangan).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  }).sort(urutTx);
+  if (!arr.length) return '<div class="card empty">Belum ada transaksi.</div>';
+  return '<div class="list">' + listHari(arr.slice(0, 80)) + '</div>' + (arr.length > 80 ? '<p class="xs muted center mt">Menampilkan 80 dari ' + arr.length + ' · persempit dengan periode/pencarian</p>' : '<p class="xs muted center mt">' + arr.length + ' transaksi</p>');
+}
+function kasRefreshList() { const el = $('#kasList'); if (el) el.innerHTML = S.page === 'kasbank' ? kasRiwayat('BANK') : kasRiwayat('TUNAI'); }
+A.kPer = v => { S.kf.per = v === 'ALL' ? '' : v; kasRefreshList(); };
+let _kqt = null;
+A.kQ = v => { S.kf.q = v; clearTimeout(_kqt); _kqt = setTimeout(kasRefreshList, 150); };
+
+PAGES.kasbank = function () {
+  const c = S.calc;
+  let h = '<div class="grid g2 mb">' + kpi('Saldo Kas Bank', 'bank', rp(c.now.BANK), 'Per ' + fmtTgl(hariIni()), 'hero') + '</div>';
+  h += '<div class="banner" style="background:var(--accent-soft)">' + icon('info') + '<div>Halaman ini hanya riwayat transaksi di rekening bank. Dana yang ditarik tampil di <a href="javascript:void(0)" onclick="A.go(\'kastunai\')">Kas Tunai</a>.</div></div>';
+  h += kasToolbar('Cari uraian, no. bukti…') + '<div id="kasList">' + kasRiwayat('BANK') + '</div>';
+  V().innerHTML = h;
+};
+PAGES.kastunai = function () {
+  const c = S.calc, bend = can('BENDAHARA'), bebas = c.now.TUNAI - c.titipan - c.belumSerah;
+  const bl = S.B.penyaluran.filter(x => x.Status === 'BELUM').sort((a, b) => a.Tanggal < b.Tanggal ? -1 : 1);
+  let h = '<div class="grid g2 mb">' + kpi('Saldo Kas Tunai', 'wallet', rp(c.now.TUNAI), 'Uang di tangan Bendahara', 'hero')
+    + kpi('Dana kegiatan belum cair', 'users', rp(c.belumSerah), bl.length + ' kegiatan · masih di kas tunai', c.belumSerah > 0 ? 'warn' : '')
+    + kpi('Titipan pajak', 'percent', rp(c.titipan), 'Belum disetor', c.titipan > 0 ? 'warn' : '', c.titipan > 0 ? 'A.go(\'pajak\')' : '')
+    + '</div><div class="banner" style="background:var(--accent-soft)">' + icon('info') + '<div>Bebas dipakai: <b>' + rp(bebas) + '</b> (saldo dikurangi titipan pajak dan dana kegiatan yang belum dicairkan di Siskeudes).</div></div>';
+  h += '<div class="sectionhead"><h2>Dana kegiatan di kas tunai</h2>' + (bend && bl.filter(x => x.Serah !== 'SUDAH').length > 1 ? '<button class="btn sm" onclick="A.formSerah()">Serahkan beberapa</button>' : '') + '</div>';
+  h += bl.length ? '<div class="list">' + bl.map(x => '<div class="item wrapi"><span class="grow"><span class="t1">' + esc(x.Kegiatan) + '</span><span class="t2"><span>Untuk ' + esc(x.DiserahkanKepada) + '</span><span>Ditarik ' + fmtTgl(x.Tanggal) + '</span>'
+    + (diffHari(x.Tanggal, hariIni()) > 14 ? pill('bad', diffHari(x.Tanggal, hariIni()) + ' hari') : '') + (x.Serah === 'SUDAH' ? pill('ok', 'Diserahkan ' + fmtTgl(x.TglDiserahkan)) : pill('wr', 'Belum diserahkan')) + '</span></span>'
+    + '<span class="amt">' + fmtNum(x.Jumlah) + '</span>'
+    + (bend ? '<span class="acts">' + (x.Serah === 'SUDAH' ? '' : '<button class="btn sm" onclick="A.serahSatu(\'' + x.ID + '\')">Serahkan</button>') + '<button class="btn sm pri" onclick="A.tandaSisSl(\'' + x.ID + '\')">Cairkan di Siskeudes</button></span>' : '') + '</div>').join('') + '</div>'
+    : '<div class="card empty">Tidak ada dana kegiatan yang menunggu pencairan.</div>';
+  h += '<div class="sectionhead"><h2>Riwayat kas tunai</h2></div>' + kasToolbar('Cari uraian, no. bukti…') + '<div id="kasList">' + kasRiwayat('TUNAI') + '</div>';
+  V().innerHTML = h;
+};
+A.serahSatu = id => {
+  const x = S.B.penyaluran.find(p => p.ID === id); if (!x) return;
+  Modal.closeAll();
+  const ov = Modal.open({ title: 'Catat penyerahan ke pelaksana', body: '<div class="sum mb"><div><span>' + esc(x.Kegiatan) + '</span><b>' + rp(x.Jumlah) + '</b></div><div><span>Kepada</span><b>' + esc(x.DiserahkanKepada) + '</b></div></div><div class="hint mb">Hanya pencatatan. Kas tunai baru berkurang saat kegiatan dicairkan di Siskeudes.</div>'
+    + '<div class="field"><label for="srTgl1">Tanggal penyerahan</label><input class="inp" type="date" id="srTgl1" value="' + hariIni() + '"></div>', footer: '<button class="btn" onclick="A.tutupModal()">Batal</button><button class="btn pri" data-ok>Serahkan</button>' });
+  $('[data-ok]', ov).onclick = function () { withBusy(this, async () => {
+    const res = await api('serahkanDana', { ids: [id], tanggal: $('#srTgl1').value });
+    applyDelta(res.data.delta); Modal.closeAll(); toast(res.message, 'ok'); rerender();
+  }); };
+};
+A.tandaSisSl = id => {
+  Modal.closeAll();
+  const x = S.B.penyaluran.find(p => p.ID === id) || {};
+  const ov = Modal.open({ title: 'Cairkan di Siskeudes', body: '<div class="sum mb"><div><span>' + esc(x.Kegiatan) + '</span><b>' + rp(x.Jumlah) + '</b></div><div><span>Kas tunai berkurang</span><b>' + rp(x.Jumlah) + '</b></div></div><div class="field"><label for="ssTgl2">Tanggal pencairan</label><input class="inp" type="date" id="ssTgl2" value="' + hariIni() + '"></div>', footer: '<button class="btn" onclick="A.tutupModal()">Batal</button><button class="btn pri" data-ok>Simpan</button>' });
+  $('[data-ok]', ov).onclick = function () { withBusy(this, async () => {
+    const res = await api('setSiskeudes', { tx: [], salur: [id], status: 'SUDAH', tanggal: $('#ssTgl2').value });
+    applyDelta(res.data.delta); Modal.closeAll(); toast(res.message, 'ok'); rerender();
+  }); };
+};
+A.sisTab = v => { S.kf.tab = v; PAGES.siskeudes(); };
+PAGES.siskeudes = function () {
+  const c = S.calc, bend = can('BENDAHARA'), tab = S.kf.tab || 'BELUM';
+  const sudahTx = S.B.transaksi.filter(t => t.Jenis === 'KELUAR' && !t.KoreksiDari && !t.DikoreksiID && t.Siskeudes === 'SUDAH');
+  const sudahSl = S.B.penyaluran.filter(x => x.Status === 'BELUM' && x.Siskeudes === 'SUDAH');
+  const nBelum = c.sisTx.length + c.sisSl.length, nSudah = sudahTx.length + sudahSl.length;
+  let h = '<div class="mb">' + kpi('Belum dicairkan di Siskeudes', 'file', rp(c.sisJml), nBelum ? nBelum + ' kegiatan/pengeluaran' : 'Semua sudah dicairkan', nBelum ? 'warn' : '', '') + '</div>';
+  h += '<div class="tabs mb"><button class="chip ' + (tab === 'BELUM' ? 'on' : '') + '" onclick="A.sisTab(\'BELUM\')">Belum dicairkan (' + nBelum + ')</button><button class="chip ' + (tab === 'SUDAH' ? 'on' : '') + '" onclick="A.sisTab(\'SUDAH\')">Sudah dicairkan (' + nSudah + ')</button></div>';
+  const btn = (lbl, fn, cls) => bend ? '<button class="btn sm ' + (cls || '') + '" onclick="' + fn + '">' + lbl + '</button>' : '';
+  if (tab === 'BELUM') {
+    const rows = c.sisTx.map(x => ({ tgl: x.Tanggal, t: x.Kegiatan || x.Uraian, s: x.NoBukti + ' · ' + ketKas(x), j: x.Jumlah, act: btn('Cairkan', 'A.tandaSis(\'' + x.ID + '\')', 'pri'), clk: x.ID }))
+      .concat(c.sisSl.map(x => ({ tgl: x.Tanggal, t: x.Kegiatan, s: x.DiserahkanKepada + ' · masih di kas tunai' + (x.Serah === 'SUDAH' ? ' · sudah diserahkan' : ''), j: x.Jumlah, act: btn('Cairkan', 'A.tandaSisSl(\'' + x.ID + '\')', 'pri') }))).sort((a, b) => a.tgl < b.tgl ? 1 : -1);
+    if (bend && rows.length > 1) h += '<div class="row between mb"><span class="small muted">Ketuk "Cairkan" per baris, atau</span><button class="btn sm" onclick="A.formSis()">Cairkan beberapa</button></div>';
+    h += rows.length ? '<div class="list">' + rows.map(x => '<div class="item"><span class="grow"><span class="t1">' + esc(x.t) + '</span><span class="t2"><span>' + fmtTgl(x.tgl) + '</span><span>' + esc(x.s) + '</span></span></span><span class="amt">' + fmtNum(x.j) + '</span>' + x.act + '</div>').join('') + '</div>' : '<div class="card empty">Semua transaksi sudah dicairkan di Siskeudes.</div>';
+  } else {
+    const rows = sudahTx.map(x => ({ tgl: x.TglSiskeudes || x.Tanggal, t: x.Kegiatan || x.Uraian, s: x.NoBukti, j: x.Jumlah, act: (x.GrupID || S.B.penyaluran.some(p => p.TransaksiSerahID === x.ID)) ? '' : btn('Batalkan', 'A.setSis([\'' + x.ID + '\'],[],\'BELUM\')') }))
+      .concat(sudahSl.map(x => ({ tgl: x.TglSiskeudes || x.Tanggal, t: x.Kegiatan, s: x.DiserahkanKepada, j: x.Jumlah, act: btn('Batalkan', 'A.setSis([],[\'' + x.ID + '\'],\'BELUM\')') }))).sort((a, b) => a.tgl < b.tgl ? 1 : -1);
+    h += rows.length ? '<div class="list">' + rows.slice(0, 100).map(x => '<div class="item"><span class="grow"><span class="t1">' + esc(x.t) + '</span><span class="t2">' + pill('ok', 'Cair ' + fmtTgl(x.tgl)) + '<span>' + esc(x.s) + '</span></span></span><span class="amt">' + fmtNum(x.j) + '</span>' + x.act + '</div>').join('') + '</div>' : '<div class="card empty">Belum ada yang dicairkan.</div>';
+  }
+  V().innerHTML = h;
 };
 
 // ── Pajak ──
@@ -1022,7 +1113,7 @@ PAGES.menu = function () {
   const row = (fn, ic, t, s, cls) => '<button class="menuitem ' + (cls || '') + '" onclick="' + fn + '"><span class="ico">' + icon(ic) + '</span><span class="grow">' + t + (s ? '<small>' + s + '</small>' : '') + '</span>' + icon('chev', 'sm') + '</button>';
   const nama = S.user.nama || S.user.username || '?', ini = nama.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
   let h = '<div class="profile"><span class="avatar">' + esc(ini) + '</span><div class="grow"><div class="p-n ellipsis">' + esc(nama) + '</div><div class="p-s ellipsis">@' + esc(S.user.username) + ' · ' + esc(S.B.config.namaDesa || '') + '</div></div><span class="p-role">' + esc(ROLE[S.user.role]) + '</span></div>';
-  h += '<div class="sectionhead"><h2>Periode</h2></div><div class="tiles">' + tile('tutup', 'lock', 'Tutup Bulan', 'Rekonsiliasi &amp; persetujuan') + '</div>';
+  h += '<div class="sectionhead"><h2>Pencatatan</h2></div><div class="tiles">' + tile('pajak', 'percent', 'Pajak', 'Titipan &amp; setoran pajak') + tile('laporan', 'file', 'Laporan', 'Buku kas &amp; rekap') + tile('tutup', 'lock', 'Tutup Bulan', 'Rekonsiliasi &amp; persetujuan') + '</div>';
   if (isSU()) h += '<div class="sectionhead"><h2>Administrasi</h2></div><div class="tiles">' + tile('master', 'book', 'Master Data', 'Kategori, sumber dana, pajak') + tile('pengguna', 'users', 'Pengguna', 'Akun dan peran') + tile('pengaturan', 'sliders', 'Pengaturan', 'Identitas desa, saldo awal') + tile('audit', 'shield', 'Audit Log', 'Riwayat perubahan') + '</div>';
   h += '<div class="sectionhead"><h2>Akun</h2></div><div class="list">' + row('A.formPassword()', 'shield', 'Ganti password', '') + row('A.toggleTema()', 'moon', 'Tema terang / gelap', 'Ubah tampilan sesuai kenyamanan mata') + row('A.keluar()', 'logout', 'Keluar', '@' + esc(S.user.username), 'dng') + '</div>'
     + '<p class="xs muted center mt2">' + esc(S.B.config.appName || 'SIKADES') + ' v1.0</p>';
